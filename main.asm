@@ -44,8 +44,8 @@ HIGH_RSI
     
     BTFSS PORTB, 3		; Si echo inactiu, reiniciar comptador
     CALL RESET_COUNTER		; POSAR RESET EN EL BTFSC PORTB, ECHO
-    BCF INTCON, PEIE, ACCESS     ; Habilitar interrupciones periféricas
-    BCF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
+    BSF INTCON, PEIE, ACCESS     ; Habilitar interrupciones periféricas
+    BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
     RETFIE FAST
     
 ; --------------------------------------------
@@ -64,16 +64,16 @@ ENVIAR_PULSO_10US
 ; MIDE EL TIEMPO DEL PULSO ECHO
 ; --------------------------------------------
 MEDIR_DISTANCIA
-    GOTO RESET_COUNTER
+    CALL RESET_COUNTER
 
 ESPERAR_ECHO_ACTIVO
     BTFSS PORTB,3
     GOTO ESPERAR_ECHO_ACTIVO   ; Esperar hasta que ECHO = 1
-
+    
 ESPERAR_ECHO_BAJO
     BTFSC PORTB,3
     GOTO ESPERAR_ECHO_BAJO     ; Esperar mientras ECHO = 1
-
+    BSF LATA,3,0
     MOVF TICS_COUNTER_L, W
     MOVWF DISTANCIA
     RETURN
@@ -195,11 +195,10 @@ LOOP_RETARDO
 ;DISTANCIA NOTES
 INCREMENT_COUNTER
     INCF TICS_COUNTER_L, F	; Incrementa comptador low
-    BSF LATA,3,0
+    
     RETURN
 RESET_COUNTER
     CLRF TICS_COUNTER_L
-    
     RETURN
     
 ; --------------------------------------------
