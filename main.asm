@@ -135,38 +135,24 @@ CALCULAR_NOTA
     GOTO SET_SI
 
 SET_DO
-    MOVLW b'00000001'
-    MOVWF LATD
     MOVLW .6
     GOTO SET_NOTA
 SET_RE
-    MOVLW b'00000010'
-    MOVWF LATD
     MOVLW .12
     GOTO SET_NOTA
 SET_MI
-    MOVLW b'00000011'
-    MOVWF LATD
     MOVLW .18
     GOTO SET_NOTA
 SET_FA
-    MOVLW b'00000100'
-    MOVWF LATD
     MOVLW .24
     GOTO SET_NOTA
 SET_SOL
-    MOVLW b'00000101'
-    MOVWF LATD
     MOVLW .30
     GOTO SET_NOTA
 SET_LA
-    MOVLW b'00000110'
-    MOVWF LATD
     MOVLW .36
     GOTO SET_NOTA
 SET_SI
-    MOVLW b'00000111'
-    MOVWF LATD
     MOVLW .42
 
 SET_NOTA
@@ -224,11 +210,7 @@ INIT_PORTS
     ; Configurar RB3 (ECHO) como entrada, RB2 (TRIGGER) como salida
     BSF TRISB,3,0
     BCF TRISB,2,0
-    ;bits debugging
-    CLRF TRISD,0
-    CLRF LATD,0
-    CLRF TRISA,0
-    CLRF LATA,0
+
     ; Configurar RC5 como salida (Altavoz)
     BCF TRISC,5,0
     BCF PORTC,5,0
