@@ -21,9 +21,11 @@ SEVENSEGMENTS_NUEVE EQU b'10001100'  ; 9: a, b, c, d, f, g
 CANTIDAD_NOTAS EQU   0x0020
 PRIMER_DATO EQU      0x0030 ;A PARTIR DE AQUÍ COMENZAMOS A GUARDAR LAS NOTAS (del bit 0 al 2) Y LAS DURACIONES (del bit 3 al 4)
 PUNTERO_7SEG EQU     0x0040
-TEMP1 EQU   0x0050
-TEMP2 EQU   0x0051
-TEMP EQU   0x0052
+TEMP EQU             0x0050
+TEMP1 EQU            0x0052
+TEMP2 EQU            0x0053
+TEMP3 EQU            0x0054
+NOTA_ACTUAL EQU      0x0051
 
 
 ORG 0x0000
@@ -32,6 +34,7 @@ ORG 0x0008
 GOTO HIGH_RSI
 ORG 0x0018
 RETFIE FAST
+
  
  
 ; Subrutina para cargar el Timer0 (20 ms)
@@ -52,7 +55,20 @@ COMPROBAR
     BCF T0CON, TMR0ON, 0
     BCF INTCON, TMR0IF, 0
     RETURN
-
+    
+ESPERA_3SEG
+    MOVLW d'100'
+    MOVWF TEMP2
+WAIT_3_SEC_LOOP2
+    MOVLW d'100'
+    MOVWF TEMP1
+WAIT_3_SEC_LOOP1
+    CALL ESPERA
+    DECFSZ TEMP1, F
+    GOTO WAIT_3_SEC_LOOP1
+    DECFSZ TEMP2, F
+    GOTO WAIT_3_SEC_LOOP2
+    RETURN
 
 
 HIGH_RSI
@@ -142,7 +158,7 @@ INIT_START_GAME
     
     RETURN
 
-UPDATE_7SEG
+UPDATE_7SEG ; Pre: INDF0 debe apuntar al numero que se quiere mostrar
 
     MOVF INDF0, W       ; Cargar el valor de la dirección apuntada por INDF0 al WREG
     ANDLW 0x07          ; Enmascarar para obtener los 3 LSB (00000111)
@@ -153,7 +169,8 @@ UPDATE_7SEG
     MOVWF LATD,0
     RETURN
     
-UPDATE_LENGTH
+UPDATE_LENGTH ; Pre: INDF0 debe apuntar a la duracion que se quiere mostrar
+    ; Post: Muestra por los dos leds RA3 y 4 el valor de la duracion
     BCF LATA,3,0
     BCF LATA,4,0
     MOVF INDF0,W
@@ -165,41 +182,6 @@ UPDATE_LENGTH
     BSF LATA,4,0
     RETURN
     
-DISPLAY_NOTES_LOOP
-    MOVLW PRIMER_DATO
-    MOVWF FSR0L
-
-DISPLAY_NEXT_NOTE
-    MOVF INDF0, W
-    ANDLW 0x07
-    ADDLW PUNTERO_7SEG
-    MOVWF FSR1L
-
-    MOVF INDF1, W
-    MOVWF LATD
-    
-    MOVLW d'100'
-    MOVWF TEMP2
-WAIT_3_SEC_LOOP2
-    MOVLW d'100'
-    MOVWF TEMP1
-WAIT_3_SEC_LOOP1
-    CALL ESPERA
-    DECFSZ TEMP1, F
-    GOTO WAIT_3_SEC_LOOP1
-    DECFSZ TEMP2, F
-    GOTO WAIT_3_SEC_LOOP2
-
-    INCF FSR0L, F
-
-    MOVLW PRIMER_DATO
-    ADDWF CANTIDAD_NOTAS, W
-    SUBWF FSR0L, W
-    BTFSS STATUS, Z
-    RETURN
-
-    GOTO STOP_PROGRAM
-   
 STOP_PROGRAM
     MOVLW 0x0000  ; Desactivar todas las interrupciones
     MOVWF INTCON       ; Escribir la configuración en el registro
@@ -213,12 +195,49 @@ STOP_PROGRAM
     LOOP
 	GOTO LOOP
     GOTO STOP_PROGRAM
+    
+PROCESAR_NOTA_ACTUAL ; Devuelve 1 al WREG si esta era la ultima nota, 0 sino.
+    
+    ; Falta hacer lo del retorno al WREG
+    CALL UPDATE_7SEG
+    CALL UPDATE_LENGTH
+    INCF FSR0L,1,0 ; Pasar a la siguiente nota y duración
+    INCF NOTA_ACTUAL, 1, 0
+    
+    CALL ESPERA_3SEG
+    
+    MOVF   CANTIDAD_NOTAS, W
+    SUBWF  NOTA_ACTUAL, W    ; WREG = WREG (CANTIDAD NOTAS) - NOTA_ACTUAL
+    BTFSS  STATUS, Z    ; Si Z=1 → son iguales (WREG = 0)
+    RETLW b'00000000' ; No iguales
+    RETLW b'11111111' ; Iguales
 
-START_GAME
+START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
+    
+    ;INDF0 Apunta a la nota que hay que sacar por el 7seg
+    ;INDF1 Se usa en UPDATE_7SEG y apunta a el valor a sacar por el 7seg
+    
+    CALL INIT_START_GAME ;Prepara los puertos, las variables, los FSR, las interrupciones etc.
     
     
-    CALL DISPLAY_NEXT_NOTE   ; Aquí mostramos las notas cada 3 segundos
-             
+    ;CALL UPDATE_7SEG    ; Llamar a la rutina para obtener el valor
+    CALL UPDATE_LENGTH
+    
+    ;INCF FSR0L,1,0 ;Pasamos a la siguiente nota y duracion
+    
+    ;************************
+    ; PROCESAMIENTO DE NOTAS
+    ;************************
+    PROCESAR_NOTAS
+    
+    ; Esta funcion dejará cargado en el WREG un 1 si ha acabado y un 0 si no.
+    CALL PROCESAR_NOTA_ACTUAL
+    MOVWF TEMP ; Pasamos el resultado de procesar_nota_actual a temp
+    BTFSS TEMP,0,0
+    GOTO PROCESAR_NOTAS
+    
+    ;************************
+    GOTO STOP_PROGRAM            
 GOTO START_GAME
     
 GUARDAR_DATOS
@@ -245,15 +264,10 @@ MODO_GUARDAR_DATOS
     BCF LATA,3,0
     BTFSC PORTA,5,0 ;Miramos si NewNote está activado
     CALL GUARDAR_DATOS ;Esto se ejecuta SI NN ESTÁ ACTIVADO
-    BTFSC PORTA,1,0 
-    CALL INIT_START_GAME ;Prepara los puertos, las variables, los FSR, las interrupciones etc.
-    BTFSC PORTA,1,0 
-    CALL DISPLAY_NOTES_LOOP
     BTFSC PORTA,1,0 ;Miramos si StartGame está activado
     GOTO START_GAME ;Esto se ejecuta SI SG ESTÁ ACTIVADO
     GOTO MODO_GUARDAR_DATOS
-    
-    
+
 CONFIG_TMR0
     ;configurar TMR0
     BCF RCON,IPEN,ACCESS ;Desactivem prioritats
@@ -267,12 +281,9 @@ CONFIG_TMR0
     BSF INTCON, GIE, ACCESS      ; Habilitar interrupciones globales
     BSF INTCON, PEIE, ACCESS     ; Habilitar interrupciones periféricas
     BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
-    RETURN
+    RETURN   
     
-MAIN
-    ; Configuración de los puertos
-    SETF    ADCON1            ; Configurar PORTA como digital
-    
+INIT_PORTS
     CLRF    PORTA
     CLRF    PORTB
     CLRF    PORTC
@@ -290,9 +301,8 @@ MAIN
     
     BCF     TRISA,3,0           ; Configurar RA3 como salida (LED)
     BCF     TRISA,4,0           ; Configurar RA4 como salida (LED)
-   
     
-;Configuracion de los puertos
+    ;Configuracion de los puertos
 
     ;Configurar RA3 y RA4 como salidas
     BCF TRISA,3,0
@@ -317,22 +327,31 @@ MAIN
     BSF TRISC,2,0 ;*************
     
     CLRF CANTIDAD_NOTAS ;Poner a 0 la cantidad de notas
+    CLRF NOTA_ACTUAL
     
-    CALL CONFIG_TMR0
     
     ; COMENZAMOS
     
     ;Preparamos el puntero INDF0 para guardar las NOTAS y las DURACIONES
     MOVLW 0x0000
     MOVWF FSR0H
-    MOVLW 0x0000
-    MOVWF FSR0L
     MOVLW PRIMER_DATO
     MOVWF FSR0L
-    
-   
 
-	
+    BCF TRISB, 2, 0
+    
+    RETURN
+    
+    
+MAIN
+    CALL INIT_PORTS
+    CALL CONFIG_TMR0
+    ; Configuración de los puertos
+    SETF    ADCON1            ; Configurar PORTA como digital
+    
+    
     GOTO MODO_GUARDAR_DATOS
+    
+    
     
     END
