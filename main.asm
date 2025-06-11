@@ -21,49 +21,49 @@ SEVENSEGMENTS_NUEVE EQU b'10001100'  ; 9: a, b, c, d, f, g
 CANTIDAD_NOTAS EQU   0x0020
 PRIMER_DATO EQU      0x0030 ;A PARTIR DE AQUÍ COMENZAMOS A GUARDAR LAS NOTAS (del bit 0 al 2) Y LAS DURACIONES (del bit 3 al 4)
 PUNTERO_7SEG EQU     0x0040
-TEMP EQU   0x0050
-CONTADOR_NOTAS EQU  0x0051
+TEMP1 EQU   0x0050
+TEMP2 EQU   0x0051
+TEMP EQU   0x0052
 
 
-
-
-ORG     0x0000
-GOTO    MAIN
-
+ORG 0x0000
+GOTO MAIN
+ORG 0x0008
+GOTO HIGH_RSI
+ORG 0x0018
+RETFIE FAST
  
  
 ; Subrutina para cargar el Timer0 (20 ms)
-CARREGA_TIMER
-    BCF     INTCON,TMR0IF,0   ; Limpiar el bit de interrupción
-    MOVLW   0xF3              ; Valor bajo para 20 ms
-    MOVWF   TMR0L             ; Escribir el valor en TMR0L
-    MOVLW   0xFC              ; Valor bajo para 20 ms
-    MOVWF   TMR0H             ; Escribir el valor en TMR0H
+TIMER0_RSI
+    BCF INTCON, TMR0IF ;carreguem de nou el numero i posem flag a 0
+    MOVLW HIGH(.64736)	    
+    MOVWF TMR0H,0
+    MOVLW LOW(.64736)	   
+    MOVWF TMR0L,0
     RETURN
-    
-ESPERA
-    ; Configurar y cargar el Timer0 para 20 ms
-    BSF T0CON, 7, 0     ; Activar el Timer0
-    CALL CARREGA_TIMER       ; Carga los valores iniciales para 20 ms
-    COMPROBAR
-    BTFSS INTCON, TMR0IF, 0  ; Verificar si se cumplió el periodo
-    GOTO COMPROBAR         ; Si no, seguir esperando
 
-    ; Desactivar el Timer0 y limpiar el flag de interrupción
-    BCF T0CON, TMR0ON, 0     ; Desactivar el Timer0
-    BCF INTCON, TMR0IF, 0    ; Limpiar el flag del Timer0
-    ;CLRF FSR0H
-    MOVF FSR0
-    ADDLW 0x01
-    MOVWF FSR0L
+ESPERA
+    BSF T0CON, TMR0ON, 0
+    CALL TIMER0_RSI
+COMPROBAR
+    BTFSS INTCON, TMR0IF, 0
+    GOTO COMPROBAR
+    BCF T0CON, TMR0ON, 0
+    BCF INTCON, TMR0IF, 0
     RETURN
+
 
 
 HIGH_RSI
-    BTFSS   INTCON,TMR0IF,0   ; Verificar si la interrupción es del Timer0
-    RETFIE  FAST		
-    CALL    CARREGA_TIMER     ; Recargar el valor inicial del Timer0
-    ;BTG     LATA,4,0          ; Invertir el estado del LED en RA3
+    BCF INTCON, GIE, ACCESS    ;desabilitar
+    BCF INTCON, TMR0IE, ACCESS  
+    
+    BTFSC INTCON, TMR0IF, ACCESS    ;Mirem si la interrupcio del timer0, saltem sino es
+    CALL TIMER0_RSI
+    
+    BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
+    BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
     RETFIE  FAST
  
 ;********************************************************************************
@@ -165,6 +165,41 @@ UPDATE_LENGTH
     BSF LATA,4,0
     RETURN
     
+DISPLAY_NOTES_LOOP
+    MOVLW PRIMER_DATO
+    MOVWF FSR0L
+
+DISPLAY_NEXT_NOTE
+    MOVF INDF0, W
+    ANDLW 0x07
+    ADDLW PUNTERO_7SEG
+    MOVWF FSR1L
+
+    MOVF INDF1, W
+    MOVWF LATD
+    
+    MOVLW d'100'
+    MOVWF TEMP2
+WAIT_3_SEC_LOOP2
+    MOVLW d'100'
+    MOVWF TEMP1
+WAIT_3_SEC_LOOP1
+    CALL ESPERA
+    DECFSZ TEMP1, F
+    GOTO WAIT_3_SEC_LOOP1
+    DECFSZ TEMP2, F
+    GOTO WAIT_3_SEC_LOOP2
+
+    INCF FSR0L, F
+
+    MOVLW PRIMER_DATO
+    ADDWF CANTIDAD_NOTAS, W
+    SUBWF FSR0L, W
+    BTFSS STATUS, Z
+    RETURN
+
+    GOTO STOP_PROGRAM
+   
 STOP_PROGRAM
     MOVLW 0x0000  ; Desactivar todas las interrupciones
     MOVWF INTCON       ; Escribir la configuración en el registro
@@ -180,31 +215,11 @@ STOP_PROGRAM
     GOTO STOP_PROGRAM
 
 START_GAME
-
-    CALL INIT_START_GAME ;Prepara los puertos, las variables, los FSR, las interrupciones etc.
-
-    MOVF CANTIDAD_NOTAS, W
-    MOVWF CONTADOR_NOTAS      ; Copiar la cantidad de notas guardadas
-
-    MOVLW PRIMER_DATO         ; Apuntar a la primera nota
-    MOVWF FSR0L
-
-MOSTRAR_NOTA
-    CALL UPDATE_7SEG          ; Mostrar la nota actual en el display
-
-    ; Esperar 3 segundos (150 veces 20 ms)
-    MOVLW 0x96
-    MOVWF TEMP
-ESPERAR_3S
-    CALL ESPERA
-    DECFSZ TEMP,1,0
-    GOTO ESPERAR_3S
-
-    INCF FSR0L,1,0            ; Pasar a la siguiente nota
-    DECFSZ CONTADOR_NOTAS,1,0
-    GOTO MOSTRAR_NOTA
-
-    GOTO STOP_PROGRAM
+    
+    
+    CALL DISPLAY_NEXT_NOTE   ; Aquí mostramos las notas cada 3 segundos
+             
+GOTO START_GAME
     
 GUARDAR_DATOS
     
@@ -230,10 +245,30 @@ MODO_GUARDAR_DATOS
     BCF LATA,3,0
     BTFSC PORTA,5,0 ;Miramos si NewNote está activado
     CALL GUARDAR_DATOS ;Esto se ejecuta SI NN ESTÁ ACTIVADO
+    BTFSC PORTA,1,0 
+    CALL INIT_START_GAME ;Prepara los puertos, las variables, los FSR, las interrupciones etc.
+    BTFSC PORTA,1,0 
+    CALL DISPLAY_NOTES_LOOP
     BTFSC PORTA,1,0 ;Miramos si StartGame está activado
     GOTO START_GAME ;Esto se ejecuta SI SG ESTÁ ACTIVADO
     GOTO MODO_GUARDAR_DATOS
-
+    
+    
+CONFIG_TMR0
+    ;configurar TMR0
+    BCF RCON,IPEN,ACCESS ;Desactivem prioritats
+    MOVLW b'10001000' ;Configurem el timer0 sin prescaler
+    MOVWF T0CON,ACCESS
+    BCF INTCON, TMR0IF, ACCESS	;Netejem flag
+    MOVLW HIGH(.64736)	    ;carguem per 1000 instruccions timer 0,1ms
+    MOVWF TMR0H,0
+    MOVLW LOW(.64736)	   
+    MOVWF TMR0L,0
+    BSF INTCON, GIE, ACCESS      ; Habilitar interrupciones globales
+    BSF INTCON, PEIE, ACCESS     ; Habilitar interrupciones periféricas
+    BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
+    RETURN
+    
 MAIN
     ; Configuración de los puertos
     SETF    ADCON1            ; Configurar PORTA como digital
@@ -283,9 +318,7 @@ MAIN
     
     CLRF CANTIDAD_NOTAS ;Poner a 0 la cantidad de notas
     
-    ; DESACTIVAR cualquier interrupción (esto es temporal xq en este codigo todavia no necesitamos)
-    MOVLW b'00000000'
-    MOVWF INTCON
+    CALL CONFIG_TMR0
     
     ; COMENZAMOS
     
@@ -297,15 +330,7 @@ MAIN
     MOVLW PRIMER_DATO
     MOVWF FSR0L
     
-    ;Configuro una interrupcion para depuerar
-    MOVLW   b'01000111'       ; Configurar Timer0 en modo de 16 bits, prescaler 1:256
-    MOVWF   T0CON             ; Escribir la configuración del Timer0
-    MOVLW b'00100000'  ; Configuración del INTCON:
-                   ; Bit 7 (GIE/GIEH) = 0 -> Interrupciones globales deshabilitadas
-                   ; Bit 6 (PEIE/GIEL) = 0 -> Interrupciones de periféricos deshabilitadas
-                   ; Bit 5 (R0IE) = 0 -> Interrupción del Timer0 deshabilitada
-                   ; Bit 2 (TMR0IF) = 1 -> Flag del Timer0 habilitado (para consulta)
-    MOVWF INTCON       ; Escribir la configuración en el registro
+   
 
 	
     GOTO MODO_GUARDAR_DATOS
