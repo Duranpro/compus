@@ -22,6 +22,7 @@ CANTIDAD_NOTAS EQU   0x0020
 PRIMER_DATO EQU      0x0030 ;A PARTIR DE AQUÍ COMENZAMOS A GUARDAR LAS NOTAS (del bit 0 al 2) Y LAS DURACIONES (del bit 3 al 4)
 PUNTERO_7SEG EQU     0x0040
 TEMP EQU   0x0050
+CONTADOR_NOTAS EQU  0x0051
 
 
 
@@ -179,16 +180,31 @@ STOP_PROGRAM
     GOTO STOP_PROGRAM
 
 START_GAME
-    
+
     CALL INIT_START_GAME ;Prepara los puertos, las variables, los FSR, las interrupciones etc.
-    
-    ;INDF0 Apunta a la nota que hay que sacar por el 7seg
-    ;INDF1 Se usa en UPDATE_7SEG y apunta a el valor a sacar por el 7seg
-    CALL UPDATE_7SEG    ; Llamar a la rutina para obtener el valor
-    CALL UPDATE_LENGTH
-    INCF FSR0L,1,0 ;Pasamos a la siguiente nota y duracion
-    GOTO STOP_PROGRAM            
-GOTO START_GAME
+
+    MOVF CANTIDAD_NOTAS, W
+    MOVWF CONTADOR_NOTAS      ; Copiar la cantidad de notas guardadas
+
+    MOVLW PRIMER_DATO         ; Apuntar a la primera nota
+    MOVWF FSR0L
+
+MOSTRAR_NOTA
+    CALL UPDATE_7SEG          ; Mostrar la nota actual en el display
+
+    ; Esperar 3 segundos (150 veces 20 ms)
+    MOVLW 0x96
+    MOVWF TEMP
+ESPERAR_3S
+    CALL ESPERA
+    DECFSZ TEMP,1,0
+    GOTO ESPERAR_3S
+
+    INCF FSR0L,1,0            ; Pasar a la siguiente nota
+    DECFSZ CONTADOR_NOTAS,1,0
+    GOTO MOSTRAR_NOTA
+
+    GOTO STOP_PROGRAM
     
 GUARDAR_DATOS
     
