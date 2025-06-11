@@ -216,7 +216,7 @@ INIT_PORTS
     BCF PORTC,5,0
     RETURN
     
-    CONFIG_TMR0
+CONFIG_TMR0
     ;configurar TMR0
     BCF RCON,IPEN,ACCESS ;Desactivem prioritats
     MOVLW b'10001000' ;Configurem el timer0 sin prescaler
