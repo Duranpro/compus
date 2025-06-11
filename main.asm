@@ -15,7 +15,7 @@ TEMP_DELAY   EQU 0x21  ; Variable para los retardos
 NOTA_TEMP    EQU 0x22  ; Variable para almacenar la nota seleccionada
 DISTANCIA    EQU 0x23  
 TICS_COUNTER_L EQU 0x24
-
+PREV_STATE EQU 0x35
 R0 EQU 0x56
 R1 EQU 0x57
  
@@ -38,10 +38,20 @@ HIGH_RSI
     MOVWF TMR0H,0
     MOVLW LOW(.64736)	   
     MOVWF TMR0L,0
-    BSF LATA,4,0
+   
     BTFSC PORTB, 3		; Si echo actiu, incrementa comptador
     CALL INCREMENT_COUNTER
-  
+    
+    BTFSC PREV_STATE, 0
+    CALL MEDIR_DISTANCIA
+    
+    BCF PREV_STATE, 0		; Posar prev_state inactiu
+    BTFSC PORTB, 3
+    BSF PREV_STATE, 0		; Si echo actiu, prev_state actiu
+    
+    BTFSS PORTB, 3		; Si echo inactiu, reiniciar comptador
+    CALL RESET_COUNTER		; POSAR RESET EN EL BTFSC PORTB, ECHO
+    
     BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
     BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
     RETFIE FAST
@@ -55,6 +65,8 @@ ENVIAR_PULSO_10US
     NOP
     NOP
     NOP
+    NOP
+    NOP
     BCF LATB,2,0  ; Desactivar TRIGGER
     CALL ESPERA_50MS
     RETURN
@@ -62,19 +74,16 @@ ENVIAR_PULSO_10US
 ; MIDE EL TIEMPO DEL PULSO ECHO
 ; --------------------------------------------
 MEDIR_DISTANCIA
-    CLRF TICS_COUNTER_L
-
-ESPERAR_ECHO_ACTIVO
     BTFSS PORTB,3
-    GOTO ESPERAR_ECHO_ACTIVO   ; Esperar hasta que ECHO = 1
+    CALL ESPERAR_ECHO_BAJO
+    RETURN
     
 ESPERAR_ECHO_BAJO
     BTFSC PORTB,3
     GOTO ESPERAR_ECHO_BAJO     ; Esperar mientras ECHO = 1
-    
+    BSF LATA,4,0
     MOVF TICS_COUNTER_L, W
     MOVWF DISTANCIA
-    CLRF TICS_COUNTER_L
     RETURN
 
 ; --------------------------------------------
@@ -82,27 +91,27 @@ ESPERAR_ECHO_BAJO
 ; --------------------------------------------
 CALCULAR_NOTA
    
-    MOVLW .6
+    MOVLW .5
     CPFSGT DISTANCIA
     GOTO SET_DO
 
-    MOVLW .12
+    MOVLW .10
     CPFSGT DISTANCIA
     GOTO SET_RE
 
-    MOVLW .17
+    MOVLW .15
     CPFSGT DISTANCIA
     GOTO SET_MI
 
-    MOVLW .23
+    MOVLW .20
     CPFSGT DISTANCIA
     GOTO SET_FA
 
-    MOVLW .29
+    MOVLW .25
     CPFSGT DISTANCIA
     GOTO SET_SOL
 
-    MOVLW .35
+    MOVLW .30
     CPFSGT DISTANCIA
     GOTO SET_LA
 
@@ -111,37 +120,37 @@ CALCULAR_NOTA
 SET_DO
     MOVLW b'00000001'
     MOVWF LATD
-    MOVLW .0
+    MOVLW .6
     GOTO SET_NOTA
 SET_RE
     MOVLW b'00000010'
     MOVWF LATD
-    MOVLW .2
+    MOVLW .12
     GOTO SET_NOTA
 SET_MI
     MOVLW b'00000011'
     MOVWF LATD
-    MOVLW .4
+    MOVLW .18
     GOTO SET_NOTA
 SET_FA
     MOVLW b'00000100'
     MOVWF LATD
-    MOVLW .6
+    MOVLW .24
     GOTO SET_NOTA
 SET_SOL
     MOVLW b'00000101'
     MOVWF LATD
-    MOVLW .8
+    MOVLW .30
     GOTO SET_NOTA
 SET_LA
     MOVLW b'00000110'
     MOVWF LATD
-    MOVLW .10
+    MOVLW .36
     GOTO SET_NOTA
 SET_SI
     MOVLW b'00000111'
     MOVWF LATD
-    MOVLW .12
+    MOVLW .42
 
 SET_NOTA
     MOVWF NOTA_TEMP
@@ -194,11 +203,11 @@ LOOP_RETARDO
 ;DISTANCIA NOTES
 INCREMENT_COUNTER
     INCF TICS_COUNTER_L, F	; Incrementa comptador low
+    BSF LATA,3,0
     RETURN
-    
 RESET_COUNTER
     CLRF TICS_COUNTER_L
-    BSF LATA,3,0
+    
     RETURN
     
 ; --------------------------------------------
@@ -206,7 +215,7 @@ RESET_COUNTER
 ; --------------------------------------------
 INIT_PORTS
     SETF    ADCON1
-    ;BSF     INTCON2, RBPU
+    BSF     INTCON2, RBPU
     ; Configurar RB3 (ECHO) como entrada, RB2 (TRIGGER) como salida
     BSF TRISB,3,0
     BCF TRISB,2,0
@@ -250,9 +259,8 @@ MAIN
     
 LOOP
     CALL ENVIAR_PULSO_10US
-    CALL MEDIR_DISTANCIA
     CALL CALCULAR_NOTA
-    ;CALL GENERAR_SONIDO_RC5  ; Generar sonido en RC5 manualmente
+    CALL GENERAR_SONIDO_RC5  ; Generar sonido en RC5 manualmente
 
     GOTO LOOP
 
