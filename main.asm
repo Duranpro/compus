@@ -1,6 +1,6 @@
 #include <p18f4321.inc>
 
-    CONFIG OSC = INTIO2
+    CONFIG OSC = HSPLL
     CONFIG WDT = OFF
     CONFIG PBADEN = DIG
     CONFIG MCLRE = ON       
@@ -14,10 +14,10 @@ TEMP         EQU 0x20  ; Variable para almacenar datos temporales
 TEMP_DELAY   EQU 0x21  ; Variable para los retardos
 NOTA_TEMP    EQU 0x22  ; Variable para almacenar la nota seleccionada
 DISTANCIA    EQU 0x23  
-TICS_COUNTER_L EQU 0x24
-PREV_STATE EQU 0x35
-R0 EQU 0x56
-R1 EQU 0x57
+TICS_COUNTER EQU 0x24
+COMPROBA EQU 0x35
+AUX0 EQU 0x56
+AUX1 EQU 0x57
  
 ORG 0x0000
 GOTO MAIN
@@ -25,37 +25,57 @@ ORG 0x0008
 GOTO HIGH_RSI
 ORG 0x0018
 RETFIE FAST
- 
+; --------------------------------------------
+; FUNCION HIGH_RSI
+; --------------------------------------------
 HIGH_RSI
-    BCF INTCON, GIE, ACCESS    
+    BCF INTCON, GIE, ACCESS    ;desabilitar
     BCF INTCON, TMR0IE, ACCESS  
     
-    BTFSS INTCON, TMR0IF, ACCESS    ;Mirem si la interrupcio es del timer0 sino la saltem
-    RETFIE FAST
-   
-    BCF INTCON, TMR0IF
-    MOVLW HIGH(.64736)	    
-    MOVWF TMR0H,0
-    MOVLW LOW(.64736)	   
-    MOVWF TMR0L,0
-   
-    BTFSC PORTB, 3		; Si echo actiu, incrementa comptador
-    CALL INCREMENT_COUNTER
-    
-    BTFSC PREV_STATE, 0
-    CALL MEDIR_DISTANCIA
-    
-    BCF PREV_STATE, 0		; Posar prev_state inactiu
-    BTFSC PORTB, 3
-    BSF PREV_STATE, 0		; Si echo actiu, prev_state actiu
-    
-    BTFSS PORTB, 3		; Si echo inactiu, reiniciar comptador
-    CALL RESET_COUNTER		; POSAR RESET EN EL BTFSC PORTB, ECHO
+    BTFSC INTCON, TMR0IF, ACCESS    ;Mirem si la interrupcio del timer0, saltem sino es
+    CALL TIMER0_RSI
     
     BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
     BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
     RETFIE FAST
     
+    
+; --------------------------------------------
+; FUNCION QUE GESTIONA INTERUPCIONES DEL TIMER0
+; --------------------------------------------  
+TIMER0_RSI
+    BCF INTCON, TMR0IF ;carreguem de nou el numero i posem flag a 0
+    MOVLW HIGH(.64736)	    
+    MOVWF TMR0H,0
+    MOVLW LOW(.64736)	   
+    MOVWF TMR0L,0
+   
+    BTFSC PORTB, 3		; Si echo activo, incrementa
+    CALL NOTA_INCREMENT
+    
+    BTFSC COMPROBA, 0
+    CALL MEDIR_DISTANCIA
+    
+    BCF COMPROBA, 0
+    BTFSC PORTB, 3
+    BSF COMPROBA, 0		; Si echo activo, comproba activo
+    
+    BTFSS PORTB, 3		; Si echo inactiu, reiniciar comptador
+    CALL NOTA_RESET
+    
+    BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
+    BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
+    RETFIE FAST
+; --------------------------------------------
+; FUNCIONES QUE GESTIONA LA DISTANCIA DE LAS NOTAS
+; --------------------------------------------  
+NOTA_INCREMENT
+    INCF TICS_COUNTER, F	; Incrementa comptador 
+    RETURN
+    
+NOTA_RESET
+    CLRF TICS_COUNTER		;reincia el contador
+    RETURN 
 ; --------------------------------------------
 ; ENVÍA UN PULSO ULTRASÓNICO DE 10us
 ; --------------------------------------------
@@ -68,21 +88,18 @@ ENVIAR_PULSO_10US
     NOP
     NOP
     BCF LATB,2,0  ; Desactivar TRIGGER
-    CALL ESPERA_50MS
+    CALL ESPERA
     RETURN
 ; --------------------------------------------
 ; MIDE EL TIEMPO DEL PULSO ECHO
 ; --------------------------------------------
 MEDIR_DISTANCIA
-    BTFSS PORTB,3
-    CALL ESPERAR_ECHO_BAJO
+    BTFSS PORTB,3 ;controlar just quan baixa per saber quan temps ha estat actiu
+    CALL ECHO_BAJO
     RETURN
     
-ESPERAR_ECHO_BAJO
-    BTFSC PORTB,3
-    GOTO ESPERAR_ECHO_BAJO     ; Esperar mientras ECHO = 1
-    BSF LATA,4,0
-    MOVF TICS_COUNTER_L, W
+ECHO_BAJO
+    MOVF TICS_COUNTER, W
     MOVWF DISTANCIA
     RETURN
 
@@ -172,67 +189,58 @@ LOOP_SONIDO
     RETURN
 
 ; --------------------------------------------
-; RETARDO CONTROLADO POR TEMP PARA FRECUENCIA
+; RETARDOS
 ; --------------------------------------------
-ESPERA_50MS
-    MOVLW   0x0A
-    MOVWF   R0
-
-OUTER_LOOP
-    MOVLW   0xFA
-    MOVWF   R1
-
-INNER_LOOP
+;espera para el triger
+ESPERA
+    MOVLW   0x0B
+    MOVWF   AUX0
+LOOP1
+    MOVLW   0xFC
+    MOVWF   AUX1
+LOOP2
     NOP
     NOP
-    DECFSZ  R1, F
-    GOTO    INNER_LOOP
-
-    DECFSZ  R0, F
-    GOTO    OUTER_LOOP
-
+    DECFSZ  AUX1, F
+    GOTO    LOOP2
+    DECFSZ  AUX0, F
+    GOTO    LOOP1
     RETURN
     
-    
+;espera para el altavoz  
 RETARDO
     MOVWF TEMP_DELAY  ; Usar el valor de TEMP como retardo
 LOOP_RETARDO
     DECFSZ TEMP_DELAY,1
     GOTO LOOP_RETARDO
     RETURN
-;DISTANCIA NOTES
-INCREMENT_COUNTER
-    INCF TICS_COUNTER_L, F	; Incrementa comptador low
-    BSF LATA,3,0
-    RETURN
-RESET_COUNTER
-    CLRF TICS_COUNTER_L
-    
-    RETURN
     
 ; --------------------------------------------
 ; CONFIGURAR PUERTOS
 ; --------------------------------------------
 INIT_PORTS
-    SETF    ADCON1
-    BSF     INTCON2, RBPU
+    SETF    ADCON1 ;pins digitals
+    BSF     INTCON2, RBPU ;desactivar pullups
     ; Configurar RB3 (ECHO) como entrada, RB2 (TRIGGER) como salida
     BSF TRISB,3,0
     BCF TRISB,2,0
+    ;bits debugging
     CLRF TRISD,0
     CLRF LATD,0
     CLRF TRISA,0
     CLRF LATA,0
-  
     ; Configurar RC5 como salida (Altavoz)
     BCF TRISC,5,0
     BCF PORTC,5,0
+    RETURN
+    
+    CONFIG_TMR0
     ;configurar TMR0
-    BCF RCON,IPEN,ACCESS ;Desactivem les prioritats
+    BCF RCON,IPEN,ACCESS ;Desactivem prioritats
     MOVLW b'10001000' ;Configurem el timer0 sin prescaler
     MOVWF T0CON,ACCESS
-    BCF INTCON, TMR0IF, ACCESS	;Netejem
-    MOVLW HIGH(.64736)	    
+    BCF INTCON, TMR0IF, ACCESS	;Netejem flag
+    MOVLW HIGH(.64736)	    ;carguem per 1000 instruccions timer 0,1ms
     MOVWF TMR0H,0
     MOVLW LOW(.64736)	   
     MOVWF TMR0L,0
@@ -243,20 +251,12 @@ INIT_PORTS
    
 
     
-CONFIG_OSC  
-    MOVLW b'01110000' ;8MHz, oscil·lador primari
-    MOVWF OSCCON, ACCESS  
-    MOVLW b'01000000' ;PLL (x4)
-    MOVWF OSCTUNE, ACCESS ;Oscil·lador intern a 32MHz (8MHz *4)
-    RETURN
-    
 ; --------------------------------------------
 ; PROGRAMA PRINCIPAL
 ; --------------------------------------------
 MAIN
-    CALL CONFIG_OSC
     CALL INIT_PORTS
-    
+    CALL CONFIG_TMR0
 LOOP
     CALL ENVIAR_PULSO_10US
     CALL CALCULAR_NOTA
