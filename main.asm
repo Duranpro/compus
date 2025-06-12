@@ -18,25 +18,26 @@ SEVENSEGMENTS_SIETE EQU b'10001111'  ; 7: a, b, c
 SEVENSEGMENTS_OCHO EQU b'10000000'   ; 8: a, b, c, d, e, f, g
 SEVENSEGMENTS_NUEVE EQU b'10001100'  ; 9: a, b, c, d, f, g
  
-CANTIDAD_NOTAS EQU   0x0020
+CANTIDAD_NOTAS EQU   0x20
 TEMP5         EQU 0x26  ; Variable para almacenar datos temporales
 TEMP_DELAY   EQU 0x21  ; Variable para los retardos
 NOTA_TEMP    EQU 0x22  ; Variable para almacenar la nota seleccionada
 DISTANCIA    EQU 0x23  
 TICS_COUNTER EQU 0x24
 COMPROBA EQU 0x25
-PRIMER_DATO EQU      0x0030 ;A PARTIR DE AQUÍ COMENZAMOS A GUARDAR LAS NOTAS (del bit 0 al 2) Y LAS DURACIONES (del bit 3 al 4)
-PUNTERO_7SEG EQU     0x0040
-TEMP EQU             0x0050
-TEMP1 EQU            0x0052
-TEMP2 EQU            0x0053
-TEMP4 EQU            0x0054
-NOTA_ACTUAL EQU      0x0051
+PRIMER_DATO EQU      0x30 ;A PARTIR DE AQUÍ COMENZAMOS A GUARDAR LAS NOTAS (del bit 0 al 2) Y LAS DURACIONES (del bit 3 al 4)
+PUNTERO_7SEG EQU     0x40
+TEMP EQU             0x50
+TEMP1 EQU            0x52
+TEMP2 EQU            0x53
+TEMP4 EQU            0x54
+NOTA_ACTUAL EQU      0x51
 AUX0 EQU 0x56
 AUX1 EQU 0x57
-TIMER0_COUNTER_H EQU 0x0055
-TIMER0_COUNTER_L EQU 0x0058
-SEGON1 EQU 0x0059
+TIMER0_COUNTER_H EQU 0x55
+TIMER0_COUNTER_L EQU 0x58
+SEGON1 EQU 0x59
+ 
 ORG 0x0000
 GOTO MAIN
 ORG 0x0008
@@ -341,8 +342,6 @@ INIT_START_GAME
     MOVWF INDF0
     INCF FSR0L,1,0
     
-    CLRF SEGON1
-    
     MOVLW PRIMER_DATO ; Colocar el puntero en la primera nota
     MOVWF FSR0L
     
@@ -397,17 +396,13 @@ STOP_PROGRAM
 	GOTO LOOP
     GOTO STOP_PROGRAM
     
-PROCESAR_NOTA_ACTUAL ; Devuelve 1 al WREG si esta era la ultima nota, 0 sino.
-    
-    ; Falta hacer lo del retorno al WREG
+PROCESAR_NOTA_ACTUAL
+    BTG LATA,4,0
     CALL UPDATE_7SEG
     CALL UPDATE_LENGTH
-    INCF FSR0L,1,0 ; Pasar a la siguiente nota y duración
-    INCF NOTA_ACTUAL, 1, 0
-    
-    ;CALL ESPERA_3SEG
+
     MOVF   CANTIDAD_NOTAS, W
-    SUBWF  NOTA_ACTUAL, W    ; WREG = WREG (CANTIDAD NOTAS) - NOTA_ACTUAL
+    SUBWF  NOTA_ACTUAL, W
     BTFSS  STATUS, Z
     GOTO NO_ES_ULTIMA
 
@@ -416,11 +411,13 @@ PROCESAR_NOTA_ACTUAL ; Devuelve 1 al WREG si esta era la ultima nota, 0 sino.
     MOVWF TEMP4
     GOTO SEGUIR
 
-    NO_ES_ULTIMA
+NO_ES_ULTIMA
     MOVLW 0x00
     MOVWF TEMP4
 
-    SEGUIR
+SEGUIR
+    INCF FSR0L,1,0 ; Pasar a la siguiente nota y duración
+    INCF NOTA_ACTUAL, 1, 0
     CALL REINICIA_COMPTADORS
     BTFSC TEMP4,0,0
     GOTO STOP_PROGRAM 
@@ -444,6 +441,7 @@ START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     ; PROCESAMIENTO DE NOTAS
     ;************************
     PROCESAR_NOTAS
+    
     ; Esta funcion dejará cargado en el WREG un 1 si ha acabado y un 0 si no.
     BTFSC SEGON1, 0
     CALL PROCESAR_NOTA_ACTUAL
