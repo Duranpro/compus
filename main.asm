@@ -24,7 +24,9 @@ TEMP_DELAY   EQU 0x21  ; Variable para los retardos
 NOTA_TEMP    EQU 0x22  ; Variable para almacenar la nota seleccionada
 DISTANCIA    EQU 0x23  
 TICS_COUNTER EQU 0x24
-COMPROBA EQU 0x25
+COMPROBA EQU 0x25   
+ESPERA_NOTES EQU 0x28
+TEMPS_CORRECTE EQU 0x29
 PRIMER_DATO EQU      0x30 ;A PARTIR DE AQUÍ COMENZAMOS A GUARDAR LAS NOTAS (del bit 0 al 2) Y LAS DURACIONES (del bit 3 al 4)
 PUNTERO_7SEG EQU     0x40
 TEMP EQU             0x50
@@ -37,7 +39,8 @@ AUX1 EQU 0x57
 TIMER0_COUNTER_H EQU 0x55
 TIMER0_COUNTER_L EQU 0x58
 SEGON1 EQU 0x59
- 
+
+
 ORG 0x0000
 GOTO MAIN
 ORG 0x0008
@@ -68,10 +71,12 @@ TIMER0_RSI
     MOVLW LOW(.64536)	   
     MOVWF TMR0L,0
     
-    BTFSS SEGON1, 0
+    BTFSS SEGON1, 0 ;incrementar contador de 500 ms
     CALL INCREMENTAR_1s
-    BTFSS SEGON1, 0
+    BTFSS SEGON1, 0 ;valida si ha llegado a las 500 ms
     CALL VALIDATE_TIME
+    BTFSC SEGON1, 0 ;cuando ha llegado a 500 ms suma 1 hasta llegar hasta 6 que son 3 segundos
+    CALL COMPTA_3s
     
     BTFSC PORTB, 3		; Si echo activo, incrementa
     CALL NOTA_INCREMENT
@@ -189,23 +194,36 @@ LOOP_SONIDO
 ; --------------------------------------------
 ; FUNCIONES QUE GESTIONA CONTAR 1 SEGUNDO
 ; -------------------------------------------- 
+COMPTA_3s ;conta 3 segons
+    CALL REINICIA_COMPTADORS
+    DECFSZ ESPERA_NOTES, F   ; Decrementa ESPERA_NOTES, salta si no es cero
+    GOTO SALTA
+    SETF TEMPS_CORRECTE
+    BTG LATA,4,0
+    SALTA
     
-REINICIA_COMPTADORS
+    RETURN 
+    
+REINICIA_CORRECTE ;reinica flag
+    CLRF TEMPS_CORRECTE
+    RETURN
+
+REINICIA_COMPTADORS;reinicia contadores
     CLRF TIMER0_COUNTER_L		    ; és la actual
     CLRF TIMER0_COUNTER_H
     CLRF SEGON1
     BCF LATA,3,0
     RETURN
     
-VALIDATE_TIME
+VALIDATE_TIME ;validar si han pasado 500 ms
     
     MOVF TIMER0_COUNTER_L, W
-    SUBLW 0x10
+    SUBLW 0x88
     BTFSS STATUS, Z
     RETURN
     
     MOVF TIMER0_COUNTER_H, W
-    SUBLW 0x27
+    SUBLW 0x13
     BTFSS STATUS, Z
     RETURN
     BSF LATA,3,0
@@ -213,7 +231,7 @@ VALIDATE_TIME
     
     RETURN
 
-INCREMENTAR_1s
+INCREMENTAR_1s ;incrementa el contador de 500 ms
     
     INCF TIMER0_COUNTER_L, F
     BTFSC STATUS, Z
@@ -244,33 +262,6 @@ LOOP_RETARDO
     DECFSZ TEMP_DELAY,1
     GOTO LOOP_RETARDO
     RETURN
- 
-;espera temporal para las notas
-ESPERA
-    BSF T0CON, TMR0ON, 0
-    CALL TIMER0_RSI
-COMPROBAR
-    BTFSS INTCON, TMR0IF, 0
-    GOTO COMPROBAR
-    BCF T0CON, TMR0ON, 0
-    BCF INTCON, TMR0IF, 0
-    RETURN
-;espera para las notas 1 seg creo que ya no hace falta
-ESPERA_3SEG
-    MOVLW d'100'
-    MOVWF TEMP2
-WAIT_3_SEC_LOOP2
-    MOVLW d'100'
-    MOVWF TEMP1
-WAIT_3_SEC_LOOP1
-    CALL ESPERA
-    DECFSZ TEMP1, F
-    GOTO WAIT_3_SEC_LOOP1
-    DECFSZ TEMP2, F
-    GOTO WAIT_3_SEC_LOOP2
-    RETURN
-
-
 
 ; --------------------------------------------
 ; ENVÍA UN PULSO ULTRASÓNICO DE 10us
@@ -396,11 +387,45 @@ STOP_PROGRAM
 	GOTO LOOP
     GOTO STOP_PROGRAM
     
+    
+DURACION_1S ;duracion nota 1 segundo
+    MOVLW 0x02
+    MOVWF ESPERA_NOTES
+    RETURN
+DURACION_2S ;durancion notas 2 segundos
+    MOVLW 0x04
+    MOVWF ESPERA_NOTES
+    RETURN
+DURACION_3S ;duracion notas 3 segundos
+    
+    MOVLW 0x06
+    MOVWF ESPERA_NOTES
+    RETURN
+    
 PROCESAR_NOTA_ACTUAL
     BTG LATA,4,0
-    CALL UPDATE_7SEG
+    
+    
     CALL UPDATE_LENGTH
+    MOVF TEMP, W ;para saber cuanto dura la nota
+    XORLW 0x08
+    BTFSC STATUS, Z
+    CALL DURACION_1S
 
+    MOVF TEMP, W
+    XORLW 0x10
+    BTFSC STATUS, Z
+    CALL DURACION_2S
+
+    MOVF TEMP, W
+    XORLW 0x18
+    BTFSC STATUS, Z
+    CALL DURACION_3S
+    MOVLW 0x06
+    MOVWF ESPERA_NOTES 
+    
+    CALL UPDATE_7SEG
+    
     MOVF   CANTIDAD_NOTAS, W
     SUBWF  NOTA_ACTUAL, W
     BTFSS  STATUS, Z
@@ -418,7 +443,7 @@ NO_ES_ULTIMA
 SEGUIR
     INCF FSR0L,1,0 ; Pasar a la siguiente nota y duración
     INCF NOTA_ACTUAL, 1, 0
-    CALL REINICIA_COMPTADORS
+    CALL REINICIA_CORRECTE
     BTFSC TEMP4,0,0
     GOTO STOP_PROGRAM 
     RETURN
@@ -443,7 +468,7 @@ START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     PROCESAR_NOTAS
     
     ; Esta funcion dejará cargado en el WREG un 1 si ha acabado y un 0 si no.
-    BTFSC SEGON1, 0
+    BTFSC TEMPS_CORRECTE, 0
     CALL PROCESAR_NOTA_ACTUAL
     CALL ENVIAR_PULSO_10US 
     CALL CALCULAR_NOTA
