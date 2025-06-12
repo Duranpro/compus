@@ -24,10 +24,13 @@ PUNTERO_7SEG EQU     0x0040
 TEMP EQU             0x0050
 TEMP1 EQU            0x0052
 TEMP2 EQU            0x0053
-TEMP3 EQU            0x0054
+TEMP4 EQU            0x0054
 NOTA_ACTUAL EQU      0x0051
-
-
+AUX0 EQU 0x56
+AUX1 EQU 0x57
+TIMER0_COUNTER_H EQU 0x0055
+TIMER0_COUNTER_L EQU 0x0058
+SEGON1 EQU 0x0059
 ORG 0x0000
 GOTO MAIN
 ORG 0x0008
@@ -40,12 +43,69 @@ RETFIE FAST
 ; Subrutina para cargar el Timer0 (20 ms)
 TIMER0_RSI
     BCF INTCON, TMR0IF ;carreguem de nou el numero i posem flag a 0
-    MOVLW HIGH(.64736)	    
+    MOVLW HIGH(.64536)	    
     MOVWF TMR0H,0
-    MOVLW LOW(.64736)	   
+    MOVLW LOW(.64536)	   
     MOVWF TMR0L,0
+    
+    BTFSS SEGON1, 0
+    CALL INCREMENTAR_1s
+    BTFSS SEGON1, 0
+    CALL VALIDATE_TIME
+    
+    ;BTFSC PORTA,1,0 ;Miramos si StartGame está activado
+    ;CALL ENVIAR_PULSO_10US 
+    
+    RETURN
+    
+REINICIA_COMPTADORS
+    CLRF TIMER0_COUNTER_L		    ; és la actual
+    CLRF TIMER0_COUNTER_H
+    CLRF SEGON1
+    BCF LATA,3,0
+    RETURN
+    
+VALIDATE_TIME
+    
+    MOVF TIMER0_COUNTER_L, W
+    SUBLW 0x10
+    BTFSS STATUS, Z
+    RETURN
+    
+    MOVF TIMER0_COUNTER_H, W
+    SUBLW 0x27
+    BTFSS STATUS, Z
+    RETURN
+    BSF LATA,3,0
+    SETF SEGON1                    ; Ja he comptat els 500milis inicials
+    
     RETURN
 
+INCREMENTAR_1s
+    
+    INCF TIMER0_COUNTER_L, F
+    BTFSC STATUS, Z
+    INCF TIMER0_COUNTER_H, F
+    RETURN
+; --------------------------------------------
+; RETARDOS
+; --------------------------------------------
+;espera para el triger
+ESPERA2
+    MOVLW   0x0B
+    MOVWF   AUX0
+LOOP1
+    MOVLW   0xFC
+    MOVWF   AUX1
+LOOP2
+    NOP
+    NOP
+    DECFSZ  AUX1, F
+    GOTO    LOOP2
+    DECFSZ  AUX0, F
+    GOTO    LOOP1
+    RETURN
+;espera temporal para las notas
 ESPERA
     BSF T0CON, TMR0ON, 0
     CALL TIMER0_RSI
@@ -55,7 +115,7 @@ COMPROBAR
     BCF T0CON, TMR0ON, 0
     BCF INTCON, TMR0IF, 0
     RETURN
-    
+;espera para las notas 1 seg  
 ESPERA_3SEG
     MOVLW d'100'
     MOVWF TEMP2
@@ -81,7 +141,20 @@ HIGH_RSI
     BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
     BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
     RETFIE  FAST
- 
+; --------------------------------------------
+; ENVÍA UN PULSO ULTRASÓNICO DE 10us
+; --------------------------------------------
+ENVIAR_PULSO_10US
+   
+    BSF LATB,2,0  ; Activar TRIGGER (RB2)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    BCF LATB,2,0  ; Desactivar TRIGGER
+    CALL ESPERA2
+    RETURN
 ;********************************************************************************
 ;GUARDAR NOTAS y DURACIONES
     
@@ -138,6 +211,7 @@ INIT_START_GAME
     MOVWF INDF0
     INCF FSR0L,1,0
     
+    CLRF SEGON1
     
     MOVLW PRIMER_DATO ; Colocar el puntero en la primera nota
     MOVWF FSR0L
@@ -171,15 +245,12 @@ UPDATE_7SEG ; Pre: INDF0 debe apuntar al numero que se quiere mostrar
     
 UPDATE_LENGTH ; Pre: INDF0 debe apuntar a la duracion que se quiere mostrar
     ; Post: Muestra por los dos leds RA3 y 4 el valor de la duracion
-    BCF LATA,3,0
-    BCF LATA,4,0
+    
+    
     MOVF INDF0,W
     ANDLW 0x0018
     MOVWF TEMP
-    BTFSC TEMP,3,0
-    BSF LATA,3,0
-    BTFSC TEMP,4,0
-    BSF LATA,4,0
+    
     RETURN
     
 STOP_PROGRAM
@@ -204,14 +275,28 @@ PROCESAR_NOTA_ACTUAL ; Devuelve 1 al WREG si esta era la ultima nota, 0 sino.
     INCF FSR0L,1,0 ; Pasar a la siguiente nota y duración
     INCF NOTA_ACTUAL, 1, 0
     
-    CALL ESPERA_3SEG
-    
+    ;CALL ESPERA_3SEG
     MOVF   CANTIDAD_NOTAS, W
     SUBWF  NOTA_ACTUAL, W    ; WREG = WREG (CANTIDAD NOTAS) - NOTA_ACTUAL
-    BTFSS  STATUS, Z    ; Si Z=1 → son iguales (WREG = 0)
-    RETLW b'00000000' ; No iguales
-    RETLW b'11111111' ; Iguales
+    BTFSS  STATUS, Z
+    GOTO NO_ES_ULTIMA
 
+    ; Si son iguales (es la última nota)
+    MOVLW 0xFF
+    MOVWF TEMP4
+    GOTO SEGUIR
+
+    NO_ES_ULTIMA
+    MOVLW 0x00
+    MOVWF TEMP4
+
+    SEGUIR
+    CALL REINICIA_COMPTADORS
+    BTFSC TEMP4,0,0
+    GOTO STOP_PROGRAM 
+    RETURN
+          
+    
 START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     
     ;INDF0 Apunta a la nota que hay que sacar por el 7seg
@@ -229,15 +314,14 @@ START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     ; PROCESAMIENTO DE NOTAS
     ;************************
     PROCESAR_NOTAS
-    
     ; Esta funcion dejará cargado en el WREG un 1 si ha acabado y un 0 si no.
+    BTFSC SEGON1, 0
     CALL PROCESAR_NOTA_ACTUAL
-    MOVWF TEMP ; Pasamos el resultado de procesar_nota_actual a temp
-    BTFSS TEMP,0,0
+    CALL ENVIAR_PULSO_10US 
     GOTO PROCESAR_NOTAS
     
     ;************************
-    GOTO STOP_PROGRAM            
+      
 GOTO START_GAME
     
 GUARDAR_DATOS
@@ -260,8 +344,7 @@ GUARDAR_DATOS
     GOTO ESPERAR_NEWNOTE
     
 MODO_GUARDAR_DATOS
-    BSF LATA,3,0 ;Esto es para debugar, ni caso
-    BCF LATA,3,0
+    
     BTFSC PORTA,5,0 ;Miramos si NewNote está activado
     CALL GUARDAR_DATOS ;Esto se ejecuta SI NN ESTÁ ACTIVADO
     BTFSC PORTA,1,0 ;Miramos si StartGame está activado
@@ -274,9 +357,9 @@ CONFIG_TMR0
     MOVLW b'10001000' ;Configurem el timer0 sin prescaler
     MOVWF T0CON,ACCESS
     BCF INTCON, TMR0IF, ACCESS	;Netejem flag
-    MOVLW HIGH(.64736)	    ;carguem per 1000 instruccions timer 0,1ms
+    MOVLW HIGH(.64536)	    ;carguem per 1000 instruccions timer 0,1ms
     MOVWF TMR0H,0
-    MOVLW LOW(.64736)	   
+    MOVLW LOW(.64536)	   
     MOVWF TMR0L,0
     BSF INTCON, GIE, ACCESS      ; Habilitar interrupciones globales
     BSF INTCON, PEIE, ACCESS     ; Habilitar interrupciones periféricas
@@ -339,6 +422,7 @@ INIT_PORTS
     MOVWF FSR0L
 
     BCF TRISB, 2, 0
+    BSF TRISB, 3, 0
     
     RETURN
     
