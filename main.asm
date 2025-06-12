@@ -19,6 +19,12 @@ SEVENSEGMENTS_OCHO EQU b'10000000'   ; 8: a, b, c, d, e, f, g
 SEVENSEGMENTS_NUEVE EQU b'10001100'  ; 9: a, b, c, d, f, g
  
 CANTIDAD_NOTAS EQU   0x0020
+TEMP5         EQU 0x26  ; Variable para almacenar datos temporales
+TEMP_DELAY   EQU 0x21  ; Variable para los retardos
+NOTA_TEMP    EQU 0x22  ; Variable para almacenar la nota seleccionada
+DISTANCIA    EQU 0x23  
+TICS_COUNTER EQU 0x24
+COMPROBA EQU 0x25
 PRIMER_DATO EQU      0x0030 ;A PARTIR DE AQUÍ COMENZAMOS A GUARDAR LAS NOTAS (del bit 0 al 2) Y LAS DURACIONES (del bit 3 al 4)
 PUNTERO_7SEG EQU     0x0040
 TEMP EQU             0x0050
@@ -37,10 +43,23 @@ ORG 0x0008
 GOTO HIGH_RSI
 ORG 0x0018
 RETFIE FAST
-
+; --------------------------------------------
+; HIGH RSI
+; -------------------------------------------- 
+HIGH_RSI
+    BCF INTCON, GIE, ACCESS    ;desabilitar
+    BCF INTCON, TMR0IE, ACCESS  
+    
+    BTFSC INTCON, TMR0IF, ACCESS    ;Mirem si la interrupcio del timer0, saltem sino es
+    CALL TIMER0_RSI
+    
+    BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
+    BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
+    RETFIE  FAST 
  
- 
-; Subrutina para cargar el Timer0 (20 ms)
+; --------------------------------------------
+; TIMER 0,1 ms
+; -------------------------------------------- 
 TIMER0_RSI
     BCF INTCON, TMR0IF ;carreguem de nou el numero i posem flag a 0
     MOVLW HIGH(.64536)	    
@@ -53,10 +72,122 @@ TIMER0_RSI
     BTFSS SEGON1, 0
     CALL VALIDATE_TIME
     
-    ;BTFSC PORTA,1,0 ;Miramos si StartGame está activado
-    ;CALL ENVIAR_PULSO_10US 
+    BTFSC PORTB, 3		; Si echo activo, incrementa
+    CALL NOTA_INCREMENT
     
+    BTFSC COMPROBA, 0
+    CALL MEDIR_DISTANCIA
+    
+    BCF COMPROBA, 0
+    BTFSC PORTB, 3
+    BSF COMPROBA, 0		; Si echo activo, comproba activo
+    
+    BTFSS PORTB, 3		; Si echo inactiu, reiniciar comptador
+    CALL NOTA_RESET
+    
+    BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
+    BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
+    
+    RETFIE FAST
+; --------------------------------------------
+; FUNCIONES QUE GESTIONA LA DISTANCIA DE LAS NOTAS
+; --------------------------------------------  
+NOTA_INCREMENT
+    INCF TICS_COUNTER, F	; Incrementa comptador 
     RETURN
+    
+NOTA_RESET
+    CLRF TICS_COUNTER		;reincia el contador
+    RETURN 
+    
+; --------------------------------------------
+; MIDE EL TIEMPO DEL PULSO ECHO
+; --------------------------------------------
+MEDIR_DISTANCIA
+    BTFSS PORTB,3 ;controlar just quan baixa per saber quan temps ha estat actiu
+    CALL ECHO_BAJO
+    RETURN
+    
+ECHO_BAJO
+    MOVF TICS_COUNTER, W
+    MOVWF DISTANCIA
+    RETURN
+    
+; --------------------------------------------
+; MAPEA DISTANCIA A UNA NOTA MUSICAL
+; --------------------------------------------
+CALCULAR_NOTA
+   
+    MOVLW .5
+    CPFSGT DISTANCIA
+    GOTO SET_DO
+
+    MOVLW .10
+    CPFSGT DISTANCIA
+    GOTO SET_RE
+
+    MOVLW .15
+    CPFSGT DISTANCIA
+    GOTO SET_MI
+
+    MOVLW .20
+    CPFSGT DISTANCIA
+    GOTO SET_FA
+
+    MOVLW .25
+    CPFSGT DISTANCIA
+    GOTO SET_SOL
+
+    MOVLW .30
+    CPFSGT DISTANCIA
+    GOTO SET_LA
+
+    GOTO SET_SI
+
+SET_DO
+    MOVLW .6
+    GOTO SET_NOTA
+SET_RE
+    MOVLW .12
+    GOTO SET_NOTA
+SET_MI
+    MOVLW .18
+    GOTO SET_NOTA
+SET_FA
+    MOVLW .24
+    GOTO SET_NOTA
+SET_SOL
+    MOVLW .30
+    GOTO SET_NOTA
+SET_LA
+    MOVLW .36
+    GOTO SET_NOTA
+SET_SI
+    MOVLW .42
+
+SET_NOTA
+    MOVWF NOTA_TEMP
+    RETURN
+
+    
+; --------------------------------------------
+; GENERA ONDA CUADRADA EN RC5 (ALTAVOZ)
+; --------------------------------------------
+GENERAR_SONIDO_RC5
+    MOVF NOTA_TEMP, W   ; Usamos la nota seleccionada
+    MOVWF TEMP5          ; Pasamos el valor a TEMP
+LOOP_SONIDO
+    BSF LATC,5,0  ; Activar RC5 (Señal alta)
+    CALL RETARDO
+    BCF LATC,5,0  ; Apagar RC5 (Señal baja)
+    CALL RETARDO
+    DECFSZ TEMP5,1 ; Reducimos TEMP y repetimos hasta que se acabe
+    GOTO LOOP_SONIDO
+    RETURN
+    
+; --------------------------------------------
+; FUNCIONES QUE GESTIONA CONTAR 1 SEGUNDO
+; -------------------------------------------- 
     
 REINICIA_COMPTADORS
     CLRF TIMER0_COUNTER_L		    ; és la actual
@@ -105,6 +236,14 @@ LOOP2
     DECFSZ  AUX0, F
     GOTO    LOOP1
     RETURN
+;retardo para el altavoz   
+RETARDO
+    MOVWF TEMP_DELAY  ; Usar el valor de TEMP como retardo
+LOOP_RETARDO
+    DECFSZ TEMP_DELAY,1
+    GOTO LOOP_RETARDO
+    RETURN
+ 
 ;espera temporal para las notas
 ESPERA
     BSF T0CON, TMR0ON, 0
@@ -115,7 +254,7 @@ COMPROBAR
     BCF T0CON, TMR0ON, 0
     BCF INTCON, TMR0IF, 0
     RETURN
-;espera para las notas 1 seg  
+;espera para las notas 1 seg creo que ya no hace falta
 ESPERA_3SEG
     MOVLW d'100'
     MOVWF TEMP2
@@ -131,16 +270,7 @@ WAIT_3_SEC_LOOP1
     RETURN
 
 
-HIGH_RSI
-    BCF INTCON, GIE, ACCESS    ;desabilitar
-    BCF INTCON, TMR0IE, ACCESS  
-    
-    BTFSC INTCON, TMR0IF, ACCESS    ;Mirem si la interrupcio del timer0, saltem sino es
-    CALL TIMER0_RSI
-    
-    BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
-    BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
-    RETFIE  FAST
+
 ; --------------------------------------------
 ; ENVÍA UN PULSO ULTRASÓNICO DE 10us
 ; --------------------------------------------
@@ -318,6 +448,8 @@ START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     BTFSC SEGON1, 0
     CALL PROCESAR_NOTA_ACTUAL
     CALL ENVIAR_PULSO_10US 
+    CALL CALCULAR_NOTA
+    CALL GENERAR_SONIDO_RC5  ; Generar sonido en RC5 manualmente
     GOTO PROCESAR_NOTAS
     
     ;************************
@@ -367,16 +499,6 @@ CONFIG_TMR0
     RETURN   
     
 INIT_PORTS
-    CLRF    PORTA
-    CLRF    PORTB
-    CLRF    PORTC
-    CLRF    PORTD
-    
-    CLRF    LATA
-    CLRF    LATB
-    CLRF    LATC
-    CLRF    LATD
-    
     SETF    TRISA,0		; Ponemos todo como entrada inicialmente, de esta forma, los puertos que no usemos quedarán como entradas.
     SETF    TRISB,0
     SETF    TRISC,0
@@ -409,6 +531,12 @@ INIT_PORTS
     BSF TRISC,1,0 ;*************
     BSF TRISC,2,0 ;*************
     
+    BCF TRISB, 2, 0
+    BSF TRISB, 3, 0
+    
+    BCF TRISC,5,0
+    BCF PORTC,5,0
+    
     CLRF CANTIDAD_NOTAS ;Poner a 0 la cantidad de notas
     CLRF NOTA_ACTUAL
     
@@ -421,8 +549,7 @@ INIT_PORTS
     MOVLW PRIMER_DATO
     MOVWF FSR0L
 
-    BCF TRISB, 2, 0
-    BSF TRISB, 3, 0
+    
     
     RETURN
     
