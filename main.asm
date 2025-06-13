@@ -319,9 +319,13 @@ COMPROBAR_NOTA
     
     BTFSC STATUS, Z   ; Si Z=1, son iguales
     GOTO NOTAS_IGUALES
+    BCF LATB, 4, 0
+    BSF LATA, 2, 0
     BTG LATA,4,0      ; Enciende LED RA4
     RETURN
 NOTAS_IGUALES
+    BSF LATB, 4, 0
+    BCF LATA, 2, 0
     BTG LATA,3,0      ; Enciende LED RA3
     RETURN
     
@@ -437,6 +441,8 @@ STOP_PROGRAM
     BCF LATA,4,0
     BCF LATB, 0, 0
     BCF LATB, 1, 0
+    BCF LATB, 4, 0
+    BCF LATA, 2, 0
     
     MOVLW SEVENSEGMENTS_GUION
     MOVWF LATD
@@ -616,13 +622,18 @@ INIT_PORTS
     BSF TRISC,0,0 ;*************
     BSF TRISC,1,0 ;*************
     BSF TRISC,2,0 ;*************
+    
     BCF TRISB, 0, 0
     BCF TRISB, 1, 0
     BCF TRISB, 2, 0
     BSF TRISB, 3, 0
+    BCF TRISB, 4, 0
+    BCF TRISA, 2, 0
     
     BCF LATB, 0, 0
     BCF LATB, 1, 0
+    BCF LATB, 4, 0
+    BCF LATA, 2, 0
     
     BCF TRISC,5,0
     BCF PORTC,5,0
