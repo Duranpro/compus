@@ -40,7 +40,7 @@ AUX0 EQU 0x56
 AUX1 EQU 0x57
 TIMER0_COUNTER_L EQU 0x58
 SEGON1 EQU 0x59
-PRIMERA_NOTA EQU 0x60
+NOTA EQU 0x60
 FLAG1 EQU 0x61
 DURACIO EQU 0x62
 
@@ -80,8 +80,8 @@ TIMER0_RSI
     BTFSS SEGON1, 0 ;valida si ha llegado a las 500 ms
     CALL VALIDATE_TIME
     
-    BTFSC SEGON1, 0 
-    CALL GUARDAR_NOTA1
+    
+    CALL COMPROBAR_NOTA
     
     BTFSC SEGON1, 0 
     CALL CONTAR_DURACIO
@@ -225,7 +225,7 @@ CONTAR_DURACIO
   
     DECFSZ DURACIO, F   ; Decrementa ESPERA_NOTES, salta si no es cero
     GOTO SALTA1
-    CALL COMPROBAR_NOTA
+    
     SALTA1
     RETURN
     
@@ -315,7 +315,7 @@ ENVIAR_PULSO_10US
 COMPROBAR_NOTA
     
     MOVF NOTA_SENSOR, W     ; Carga NOTA1 en WREG
-    XORWF PRIMERA_NOTA, W    ; WREG = NOTA1 XOR NOTA2
+    XORWF NOTA, W    ; WREG = NOTA1 XOR NOTA2
     
     BTFSC STATUS, Z   ; Si Z=1, son iguales
     GOTO NOTAS_IGUALES
@@ -329,13 +329,7 @@ NOTAS_IGUALES
     BTG LATA,3,0      ; Enciende LED RA3
     RETURN
     
-GUARDAR_NOTA1
-    BTFSC FLAG1,0
-    RETURN
-    
-    MOVFF NOTA_SENSOR, PRIMERA_NOTA
-    SETF FLAG1,0
-    RETURN
+
 ;********************************************************************************
 ;GUARDAR NOTAS y DURACIONES
     
@@ -421,6 +415,8 @@ UPDATE_7SEG ; Pre: INDF0 debe apuntar al numero que se quiere mostrar
     
     MOVF INDF1, W
     MOVWF LATD,0
+    MOVF INDF1, W
+    MOVWF NOTA, 0
     RETURN
     
 UPDATE_LENGTH ; Pre: INDF0 debe apuntar a la duracion que se quiere mostrar
