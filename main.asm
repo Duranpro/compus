@@ -233,6 +233,8 @@ CONTAR_DURACIO
     DECFSZ DURACIO, F   ; Decrementa ESPERA_NOTES, salta si no es cero
     GOTO SALTA1
     SETF TEMPS_CORRECTE
+    BSF LATB, 4, 0
+    BCF LATA, 2, 0 
     SALTA1
     RETURN
     
@@ -241,6 +243,15 @@ REINICIA_COMPTADORS_500ms;reinicia contadores
     CLRF TIMER0_COUNTER_H_500
     CLRF SEGON2
     RETURN   
+INCREMENTAR_ESPERA_NOTES
+    INCF ESPERA_NOTES, F   ; Suma 1 a ESPERA_NOTES y guarda el resultado en la misma variable
+    RETURN
+    
+CONFIG_LEDS
+   BCF LATB, 4, 0
+   BCF LATA, 2, 0 
+   RETURN
+   
 VALIDATE_TIME_500ms ;validar si han pasado 500 ms
     
     MOVF TIMER0_COUNTER_L_500, W
@@ -253,7 +264,12 @@ VALIDATE_TIME_500ms ;validar si han pasado 500 ms
     BTFSS STATUS, Z
     RETURN
     SETF SEGON2                   ; Ja he comptat els 500milis inicials
+    BTFSS SEGON3,0
+    CALL CONFIG_LEDS
+    BTFSS SEGON3,0
+    CALL INCREMENTAR_ESPERA_NOTES
     SETF SEGON3
+     
     BTG LATA,4,0      ; Enciende LED RA4
     RETURN
 
@@ -268,7 +284,7 @@ COMPTA_3s ;conta 3 segons
     DECFSZ ESPERA_NOTES, F   ; Decrementa ESPERA_NOTES, salta si no es cero
     GOTO SALTA2
     SETF TEMPS_CORRECTE
-    
+    CALL CONFIG_INCORRECTE
     SALTA2
     RETURN 
     
@@ -344,7 +360,13 @@ ENVIAR_PULSO_10US
     BCF LATB,2,0  ; Desactivar TRIGGER
     CALL ESPERA2
     RETURN
-    
+
+CONFIG_INCORRECTE
+    BCF LATB, 4, 0
+    BSF LATA, 2, 0 
+    SETF TEMPS_CORRECTE
+    RETURN
+
 COMPROBAR_NOTA
     
     MOVF NOTA_SENSOR, W     ; Carga NOTA1 en WREG
@@ -352,14 +374,15 @@ COMPROBAR_NOTA
     
     BTFSC STATUS, Z   ; Si Z=1, son iguales
     GOTO NOTAS_IGUALES
-    BCF LATB, 4, 0
-    BSF LATA, 2, 0
+    
     BTFSS SEGON3, 0 
     CALL REINICIA_COMPTADORS_500ms
+    BTFSC SEGON3,0
+    CALL CONFIG_INCORRECTE
+
     RETURN
 NOTAS_IGUALES
-    BSF LATB, 4, 0
-    BCF LATA, 2, 0
+   
     BTG LATA,3,0      ; Enciende LED RA3
     
     RETURN
@@ -472,8 +495,7 @@ STOP_PROGRAM
     BCF LATA,4,0
     BCF LATB, 0, 0
     BCF LATB, 1, 0
-    BCF LATB, 4, 0
-    BCF LATA, 2, 0
+    
     
     MOVLW SEVENSEGMENTS_GUION
     MOVWF LATD
@@ -503,9 +525,7 @@ DURACION_3S ;duracion notas 3 segundos
     RETURN
     
 PROCESAR_NOTA_ACTUAL
-    
-    
-    
+       
     CALL UPDATE_LENGTH
     MOVF TEMP, W ;para saber cuanto dura la nota
     XORLW 0x08
