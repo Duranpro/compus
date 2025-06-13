@@ -83,6 +83,9 @@ TIMER0_RSI
     BTFSC SEGON1, 0 
     CALL GUARDAR_NOTA1
     
+    BTFSC SEGON1, 0 
+    CALL CONTAR_DURACIO
+    
     BTFSC SEGON1, 0 ;cuando ha llegado a 500 ms suma 1 hasta llegar hasta 6 que son 3 segundos
     CALL COMPTA_3s
     
@@ -218,16 +221,22 @@ LOOP_SONIDO
 ; --------------------------------------------
 ; FUNCIONES QUE GESTIONA CONTAR 1 SEGUNDO
 ; -------------------------------------------- 
+CONTAR_DURACIO  
+  
+    DECFSZ DURACIO, F   ; Decrementa ESPERA_NOTES, salta si no es cero
+    GOTO SALTA1
+    CALL COMPROBAR_NOTA
+    SALTA1
+    RETURN
     
     
 COMPTA_3s ;conta 3 segons
     CALL REINICIA_COMPTADORS
     DECFSZ ESPERA_NOTES, F   ; Decrementa ESPERA_NOTES, salta si no es cero
-    GOTO SALTA
+    GOTO SALTA2
     SETF TEMPS_CORRECTE
-    CALL COMPROBAR_NOTA
-    SALTA
     
+    SALTA2
     RETURN 
     
 REINICIA_CORRECTE ;reinica flag
