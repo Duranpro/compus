@@ -435,6 +435,8 @@ STOP_PROGRAM
     
     BCF LATA,3,0
     BCF LATA,4,0
+    BCF LATB, 0, 0
+    BCF LATB, 1, 0
     
     MOVLW SEVENSEGMENTS_GUION
     MOVWF LATD
@@ -445,15 +447,20 @@ STOP_PROGRAM
     
     
 DURACION_1S ;duracion nota 1 segundo
+    BSF LATB,0,0
+    BCF LATB,1,0
     MOVLW 0x02
     MOVWF DURACIO
     RETURN
 DURACION_2S ;durancion notas 2 segundos
+    BCF LATB,0,0
+    BSF LATB,1,0
     MOVLW 0x04
     MOVWF DURACIO
     RETURN
 DURACION_3S ;duracion notas 3 segundos
-    
+    BSF LATB,0,0
+    BSF LATB,1,0
     MOVLW 0x06
     MOVWF DURACIO
     RETURN
@@ -609,9 +616,13 @@ INIT_PORTS
     BSF TRISC,0,0 ;*************
     BSF TRISC,1,0 ;*************
     BSF TRISC,2,0 ;*************
-    
+    BCF TRISB, 0, 0
+    BCF TRISB, 1, 0
     BCF TRISB, 2, 0
     BSF TRISB, 3, 0
+    
+    BCF LATB, 0, 0
+    BCF LATB, 1, 0
     
     BCF TRISC,5,0
     BCF PORTC,5,0
