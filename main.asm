@@ -150,27 +150,27 @@ ECHO_BAJO
 ; --------------------------------------------
 CALCULAR_NOTA
    
-    MOVLW .5
+    MOVLW .2
     CPFSGT DISTANCIA
     GOTO SET_DO
 
-    MOVLW .10
+    MOVLW .5
     CPFSGT DISTANCIA
     GOTO SET_RE
 
-    MOVLW .15
+    MOVLW .7
     CPFSGT DISTANCIA
     GOTO SET_MI
 
-    MOVLW .20
+    MOVLW .10
     CPFSGT DISTANCIA
     GOTO SET_FA
 
-    MOVLW .25
+    MOVLW .13
     CPFSGT DISTANCIA
     GOTO SET_SOL
 
-    MOVLW .30
+    MOVLW .15
     CPFSGT DISTANCIA
     GOTO SET_LA
 
@@ -597,7 +597,7 @@ START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     PROCESAR_NOTAS
     
     ; Esta funcion dejará cargado en el WREG un 1 si ha acabado y un 0 si no.
-    BTFSC TEMPS_CORRECTE, 0
+    BTFSC TEMPS_CORRECTE, 0 ;solo entra una vez se han procesado las notas
     CALL PROCESAR_NOTA_ACTUAL
     CALL ENVIAR_PULSO_10US 
     CALL CALCULAR_NOTA
@@ -656,16 +656,16 @@ INIT_PORTS
     SETF    TRISC,0
     SETF    TRISD,0
     
-    BCF     TRISA,3,0           ; Configurar RA3 como salida (LED)
-    BCF     TRISA,4,0           ; Configurar RA4 como salida (LED)
+    BCF     TRISA,3,0           ; Configurar RA3 como salida (LED)(debugar)
+    BCF     TRISA,4,0           ; Configurar RA4 como salida (LED)(debugar)
     
     ;Configuracion de los puertos
 
     ;Configurar RA3 y RA4 como salidas
     BCF TRISA,3,0
     BCF TRISA,4,0
-    BCF LATA,3,0 
-    BCF LATA,4,0
+    BCF LATA,3,0 ;(debugar)
+    BCF LATA,4,0 ;(debugar)
     
     ;Poner RC4 y RC3 como entradas (RC4: Duration1, RC3: Duration0)
     BSF TRISC,4,0 ;****************
@@ -682,19 +682,23 @@ INIT_PORTS
     BSF TRISC,0,0 ;*************
     BSF TRISC,1,0 ;*************
     BSF TRISC,2,0 ;*************
-    
+    ;Mostrar duracion
     BCF TRISB, 0, 0
     BCF TRISB, 1, 0
+    ;Trigger y echo
     BCF TRISB, 2, 0
     BSF TRISB, 3, 0
+    ;led correcto
     BCF TRISB, 4, 0
+    ;led incorrecto
     BCF TRISA, 2, 0
-    
+    ;inicializacion
     BCF LATB, 0, 0
     BCF LATB, 1, 0
+    
     BCF LATB, 4, 0
     BCF LATA, 2, 0
-    
+    ;altavoz
     BCF TRISC,5,0
     BCF PORTC,5,0
     
