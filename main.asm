@@ -93,7 +93,9 @@ TIMER0_RSI
     
     RETFIE FAST
     
-    
+; --------------------------------------------
+; FUNCIONES DEL TIMER
+; --------------------------------------------     
 FUNCIONES    
     CALL COMPROBAR_NOTA
     
@@ -234,6 +236,7 @@ LOOP_SONIDO
 ; --------------------------------------------
 ; FUNCIONES QUE GESTIONA CONTAR 1 SEGUNDO
 ; -------------------------------------------- 
+;////////////////////TIMER 2///////////////////////////
 CONTAR_DURACIO  
     CALL REINICIA_COMPTADORS_500ms
     DECFSZ DURACIO, F   ; Decrementa ESPERA_NOTES, salta si no es cero
@@ -284,7 +287,7 @@ INCREMENTAR_500ms ;incrementa el contador de 500 ms
     BTFSC STATUS, Z
     INCF TIMER0_COUNTER_H_500, F
     RETURN   
-;////////////////////////////// NO TOCAR TEMPS DE CADA NOTA MAXIM /////////////////////////////    
+;////////////////////////////// TIMER 1 /////////////////////////////    
 COMPTA_3s ;conta 3 segons
     CALL REINICIA_COMPTADORS
     DECFSZ ESPERA_NOTES, F   ; Decrementa ESPERA_NOTES, salta si no es cero
@@ -366,7 +369,9 @@ ENVIAR_PULSO_10US
     BCF LATB,2,0  ; Desactivar TRIGGER
     CALL ESPERA2
     RETURN
-
+; --------------------------------------------
+; Comprobar notas
+; --------------------------------------------  
 CONFIG_INCORRECTE
     BCF LATB, 4, 0
     BSF LATA, 2, 0 
@@ -393,31 +398,9 @@ NOTAS_IGUALES
     
     RETURN
     
-
-;********************************************************************************
-;GUARDAR NOTAS y DURACIONES
-    
-    
-;NOTAS: Falta hacer el bucle que corra START_GAME hasta que se llegue a la cantidad guardada en CANTIDAD_NOTAS
-;********************************************************************************
-    
-GET_SEVEN_SEG ;ESTO NO SE USAAAAAAAAAA
-    ADDWF PCL, F          ; Sumar el índice al contador de programa
-    ; Salta al valor correspondiente en la tabla siguiente;
-SEVENSEG_TABLE
-    RETLW b'10000010'      ; 0
-    RETLW b'11111010'      ; 1
-    RETLW b'10010001'      ; 2
-    RETLW b'10000101'      ; 3
-    RETLW b'11001100'      ; 4
-    RETLW b'10100100'      ; 5
-    RETLW b'10100000'      ; 6
-    RETLW b'10001111'      ; 7
-    RETLW b'10000000'      ; 8
-    RETLW b'10001100'      ; 9
-    RETURN                 ; Retornar a START_GAME
-    
-    
+; --------------------------------------------
+; Init para empezar el juego
+; --------------------------------------------      
 INIT_START_GAME
     ;Preparamos el puntero para las notas
     BCF LATA,3,0
@@ -469,7 +452,9 @@ INIT_START_GAME
     MOVWF FSR1H
     
     RETURN
-
+; --------------------------------------------
+; Leer datos guardados
+; --------------------------------------------  
 UPDATE_7SEG ; Pre: INDF0 debe apuntar al numero que se quiere mostrar
 
     MOVF INDF0, W       ; Cargar el valor de la dirección apuntada por INDF0 al WREG
@@ -492,7 +477,9 @@ UPDATE_LENGTH ; Pre: INDF0 debe apuntar a la duracion que se quiere mostrar
     MOVWF TEMP
     
     RETURN
-    
+; --------------------------------------------
+; Para el programa porque se ha terminado
+; --------------------------------------------      
 STOP_PROGRAM
     MOVLW 0x0000  ; Desactivar todas las interrupciones
     MOVWF INTCON       ; Escribir la configuración en el registro
@@ -511,7 +498,9 @@ STOP_PROGRAM
 	GOTO LOOP
     GOTO STOP_PROGRAM
     
-    
+; --------------------------------------------
+; PROCESAR_NOTA_ACTUAL se encarga de gestionar la nota y guardar los datos
+; --------------------------------------------  
 DURACION_1S ;duracion nota 1 segundo
     BSF LATB,0,0
     BCF LATB,1,0
@@ -537,19 +526,20 @@ PROCESAR_NOTA_ACTUAL
     MOVF TEMP, W ;para saber cuanto dura la nota
     XORLW 0x08
     BTFSC STATUS, Z
-    CALL DURACION_1S
+    CALL DURACION_1S ; assigna valores necesarios a cada puerto o variable
 
-    MOVF TEMP, W
+    MOVF TEMP, W;para saber cuanto dura la nota
     XORLW 0x10
     BTFSC STATUS, Z
-    CALL DURACION_2S
+    CALL DURACION_2S; assigna valores necesarios a cada puerto o variable
 
-    MOVF TEMP, W
+    MOVF TEMP, W;para saber cuanto dura la nota
     XORLW 0x18
     BTFSC STATUS, Z
-    CALL DURACION_3S
+    CALL DURACION_3S; assigna valores necesarios a cada puerto o variable
+    
     MOVLW 0x06
-    MOVWF ESPERA_NOTES 
+    MOVWF ESPERA_NOTES ;temps de espera 3 segons
     
     CALL UPDATE_7SEG
     
@@ -570,13 +560,15 @@ NO_ES_ULTIMA
 SEGUIR
     INCF FSR0L,1,0 ; Pasar a la siguiente nota y duración
     INCF NOTA_ACTUAL, 1, 0
-    CALL REINICIA_CORRECTE
-    CALL REINICIA_COMPTADORS_500ms;reinicia contadores
-    CLRF SEGON3,0
+    CALL REINICIA_CORRECTE ;reinicia contador de 500 ms para el 1 segundo
+    CALL REINICIA_COMPTADORS_500ms;reinicia contador de 500 ms
+    CLRF SEGON3,0 
     BTFSC TEMP4,0,0
-    GOTO STOP_PROGRAM 
+    GOTO STOP_PROGRAM ;para el programa si esta en la ultima nota
     RETURN
-          
+; --------------------------------------------
+; Start Game bucle de funcionamiento del programa
+; --------------------------------------------            
     
 START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     
@@ -597,17 +589,19 @@ START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     PROCESAR_NOTAS
     
     ; Esta funcion dejará cargado en el WREG un 1 si ha acabado y un 0 si no.
-    BTFSC TEMPS_CORRECTE, 0 ;solo entra una vez se han procesado las notas
-    CALL PROCESAR_NOTA_ACTUAL
-    CALL ENVIAR_PULSO_10US 
-    CALL CALCULAR_NOTA
+    BTFSC TEMPS_CORRECTE, 0 ;solo entra una vez se han procesado las notas en el tiempo correspondiente
+    CALL PROCESAR_NOTA_ACTUAL ;procesa la nota y la duracion
+    CALL ENVIAR_PULSO_10US ;envia pulso trigger
+    CALL CALCULAR_NOTA ;calcula la distancia
     CALL GENERAR_SONIDO_RC5  ; Generar sonido en RC5 manualmente
-    GOTO PROCESAR_NOTAS
+    GOTO PROCESAR_NOTAS ; bucle
     
     ;************************
       
 GOTO START_GAME
-    
+; --------------------------------------------
+; Guardar los datos
+; --------------------------------------------  
 GUARDAR_DATOS
     
     ;GUARDAR NOTA y DURACION (estan ambas en el puerto C)
@@ -626,7 +620,9 @@ GUARDAR_DATOS
     BSF LATA,0,0 ; Mandamos el pulso de ACK
     BCF LATA,0,0
     GOTO ESPERAR_NEWNOTE
-    
+; --------------------------------------------
+; Bucle de guardar datos
+; --------------------------------------------      
 MODO_GUARDAR_DATOS
     
     BTFSC PORTA,5,0 ;Miramos si NewNote está activado
@@ -634,7 +630,9 @@ MODO_GUARDAR_DATOS
     BTFSC PORTA,1,0 ;Miramos si StartGame está activado
     GOTO START_GAME ;Esto se ejecuta SI SG ESTÁ ACTIVADO
     GOTO MODO_GUARDAR_DATOS
-
+; --------------------------------------------
+; Configuraciones e inits del programa
+; --------------------------------------------  
 CONFIG_TMR0
     ;configurar TMR0
     BCF RCON,IPEN,ACCESS ;Desactivem prioritats
@@ -718,7 +716,9 @@ INIT_PORTS
     
     RETURN
     
-    
+; --------------------------------------------
+; MAIN
+; --------------------------------------------     
 MAIN
     CALL INIT_PORTS
     CALL CONFIG_TMR0
