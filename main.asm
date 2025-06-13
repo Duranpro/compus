@@ -77,7 +77,8 @@ TIMER0_RSI
     MOVWF TMR0H,0
     MOVLW LOW(.64536)	   
     MOVWF TMR0L,0
-    ;//////////1r timer no toca//////////
+    
+     ;//////////1r timer no toca//////////
     BTFSS SEGON1, 0 ;incrementar contador de 500 ms
     CALL INCREMENTAR_1s
     BTFSS SEGON1, 0 ;valida si ha llegado a las 500 ms
@@ -87,7 +88,13 @@ TIMER0_RSI
     CALL INCREMENTAR_500ms
     BTFSS SEGON2, 0 ;valida si ha llegado a las 500 ms
     CALL VALIDATE_TIME_500ms
+    BTFSC PORTA,1,0 ;Miramos si StartGame está activado
+    CALL FUNCIONES
     
+    RETFIE FAST
+    
+    
+FUNCIONES    
     CALL COMPROBAR_NOTA
     
     BTFSC SEGON2, 0 
@@ -113,8 +120,7 @@ TIMER0_RSI
     
     BSF INTCON, GIE, ACCESS     ; Habilitar interrupciones periféricas
     BSF INTCON, TMR0IE, ACCESS   ; Habilitar interrupción del Timer0
-    
-    RETFIE FAST
+    RETURN
 ; --------------------------------------------
 ; FUNCIONES QUE GESTIONA LA DISTANCIA DE LAS NOTAS
 ; --------------------------------------------  
