@@ -43,8 +43,11 @@ SEGON1 EQU 0x59
 NOTA EQU 0x60
 FLAG1 EQU 0x61
 DURACIO EQU 0x62
-
-
+SEGON2 EQU 0x63
+TIMER0_COUNTER_L_500	EQU 0x64	    ; és la actual
+TIMER0_COUNTER_H_500	EQU 0x65
+SEGON3 EQU 0x66
+ 
 ORG 0x0000
 GOTO MAIN
 ORG 0x0008
@@ -74,16 +77,20 @@ TIMER0_RSI
     MOVWF TMR0H,0
     MOVLW LOW(.64536)	   
     MOVWF TMR0L,0
-    
+    ;//////////1r timer no toca//////////
     BTFSS SEGON1, 0 ;incrementar contador de 500 ms
     CALL INCREMENTAR_1s
     BTFSS SEGON1, 0 ;valida si ha llegado a las 500 ms
     CALL VALIDATE_TIME
-    
+    ;//////////////2n timer/////////////
+    BTFSS SEGON2, 0 ;incrementar contador de 500 ms
+    CALL INCREMENTAR_500ms
+    BTFSS SEGON2, 0 ;valida si ha llegado a las 500 ms
+    CALL VALIDATE_TIME_500ms
     
     CALL COMPROBAR_NOTA
     
-    BTFSC SEGON1, 0 
+    BTFSC SEGON2, 0 
     CALL CONTAR_DURACIO
     
     BTFSC SEGON1, 0 ;cuando ha llegado a 500 ms suma 1 hasta llegar hasta 6 que son 3 segundos
@@ -222,14 +229,40 @@ LOOP_SONIDO
 ; FUNCIONES QUE GESTIONA CONTAR 1 SEGUNDO
 ; -------------------------------------------- 
 CONTAR_DURACIO  
-  
+    CALL REINICIA_COMPTADORS_500ms
     DECFSZ DURACIO, F   ; Decrementa ESPERA_NOTES, salta si no es cero
     GOTO SALTA1
-    
+    SETF TEMPS_CORRECTE
     SALTA1
     RETURN
     
+REINICIA_COMPTADORS_500ms;reinicia contadores
+    CLRF TIMER0_COUNTER_L_500		    ; és la actual
+    CLRF TIMER0_COUNTER_H_500
+    CLRF SEGON2
+    RETURN   
+VALIDATE_TIME_500ms ;validar si han pasado 500 ms
     
+    MOVF TIMER0_COUNTER_L_500, W
+    SUBLW 0x88
+    BTFSS STATUS, Z
+    RETURN
+    
+    MOVF TIMER0_COUNTER_H_500, W
+    SUBLW 0x13
+    BTFSS STATUS, Z
+    RETURN
+    SETF SEGON2                   ; Ja he comptat els 500milis inicials
+    SETF SEGON3
+    BTG LATA,4,0      ; Enciende LED RA4
+    RETURN
+
+INCREMENTAR_500ms ;incrementa el contador de 500 ms
+    INCF TIMER0_COUNTER_L_500, F
+    BTFSC STATUS, Z
+    INCF TIMER0_COUNTER_H_500, F
+    RETURN   
+;////////////////////////////// NO TOCAR TEMPS DE CADA NOTA MAXIM /////////////////////////////    
 COMPTA_3s ;conta 3 segons
     CALL REINICIA_COMPTADORS
     DECFSZ ESPERA_NOTES, F   ; Decrementa ESPERA_NOTES, salta si no es cero
@@ -321,12 +354,14 @@ COMPROBAR_NOTA
     GOTO NOTAS_IGUALES
     BCF LATB, 4, 0
     BSF LATA, 2, 0
-    BTG LATA,4,0      ; Enciende LED RA4
+    BTFSS SEGON3, 0 
+    CALL REINICIA_COMPTADORS_500ms
     RETURN
 NOTAS_IGUALES
     BSF LATB, 4, 0
     BCF LATA, 2, 0
     BTG LATA,3,0      ; Enciende LED RA3
+    
     RETURN
     
 
@@ -509,6 +544,8 @@ SEGUIR
     INCF FSR0L,1,0 ; Pasar a la siguiente nota y duración
     INCF NOTA_ACTUAL, 1, 0
     CALL REINICIA_CORRECTE
+    CALL REINICIA_COMPTADORS_500ms;reinicia contadores
+    CLRF SEGON3,0
     BTFSC TEMP4,0,0
     GOTO STOP_PROGRAM 
     RETURN
