@@ -1,4 +1,4 @@
-#include <p18f4321.inc>
+ #include <p18f4321.inc>
 
 CONFIG  OSC=HSPLL      ; Oscilador de alta velocidad
 CONFIG  PBADEN=DIG  ; PORTB en modo digital
@@ -49,8 +49,9 @@ TIMER0_COUNTER_H_500	EQU 0x65
 SEGON3 EQU 0x66
 SERVO_COUNTER   EQU 0x70  ; Cuenta los 0.1 ms hasta 20 ms (200)
 SERVO_PULSE     EQU 0x71  ; Duración del pulso alto (10 o 20)
-SERVO_STATE     EQU 0x72  ; 0: incorrecto, 1: correcto
-     
+ACERTADAS        EQU 0x74   ; Número de notas acertadas
+TEMP3            EQU 0x73   ; Variable temporal para el índice de la tabla
+	    
 ORG 0x0000
 GOTO MAIN
 ORG 0x0008
@@ -129,7 +130,7 @@ FUNCIONES
 ; --------------------------------------------
 ; SERVOMOTOR
 ; --------------------------------------------  
-    SERVO_PWM
+SERVO_PWM
     INCF SERVO_COUNTER, F
     MOVF SERVO_COUNTER, W
     CPFSGT SERVO_PULSE
@@ -144,6 +145,84 @@ SERVO_CHECK_END
     BTFSS STATUS, Z
     RETURN
     CLRF SERVO_COUNTER  ; Reinicia el periodo
+    RETURN
+    
+; --- Tabla de pulsos para el servo (16 valores: 0 a 15) ---
+    ORG 0x100
+TABLA_PULSOS_SERVO
+; Cada fila = número de notas (de 1 a 16)
+; Cada columna = número de aciertos (de 1 a 16)
+; Los valores son los que aparecen en tu Excel, rellena con 0 si no hay valor
+; NOTAS = 1
+    DB .26, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 2
+    DB .13, .26, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 3
+    DB .12, .19, .26, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 4
+    DB .11, .16, .21, .26, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 5
+    DB .10, .14, .18, .22, .26, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 6
+    DB .9, .12, .15, .18, .22, .26, .0, .0, .0, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 7
+    DB .8, .11, .14, .17, .20, .23, .26, .0, .0, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 8
+    DB .8, .11, .14, .17, .19, .21, .23, .26, .0, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 9
+    DB .8, .10, .12, .14, .16, .18, .22, .24, .26, .0, .0, .0, .0, .0, .0, .0
+; NOTAS = 10
+    DB .8, .10, .12, .14, .16, .18, .20, .24, .25, .26, .0, .0, .0, .0, .0, .0
+; NOTAS = 11
+    DB .7, .9, .11, .13, .15, .17, .19, .21, .22, .24, .26, .0, .0, .0, .0, .0
+; NOTAS = 12
+    DB .7, .9, .11, .13, .15, .17, .19, .21, .22, .24, .25, .26, .0, .0, .0, .0
+; NOTAS = 13
+    DB .7, .9, .11, .13, .15, .17, .19, .21, .22, .23, .24, .25, .26, .0, .0, .0
+; NOTAS = 14
+    DB .7, .9, .11, .13, .15, .17, .19, .20, .21, .22, .23, .24, .25, .26, .0, .0
+; NOTAS = 15
+    DB .7, .9, .11, .13, .15, .17, .18, .19, .20, .21, .22, .23, .24, .25, .26, .0
+; NOTAS = 16
+    DB .7, .9, .11, .13, .15, .16, .17, .18, .19, .20, .21, .22, .23, .24, .25, .26
+INICIALIZAR_SERVO
+    MOVF CANTIDAD_NOTAS, W
+    BTFSC STATUS, Z
+    GOTO PULSO_MINIMO
+    MOVF CANTIDAD_NOTAS, W
+    DECF WREG, W
+    MOVWF TEMP1          ; TEMP1 = CANTIDAD_NOTAS-1
+    MOVLW .16
+    MULWF TEMP1          ; (CANTIDAD_NOTAS-1) * 16
+    MOVF PRODL, W
+    MOVWF TEMP2          ; TEMP2 = fila base
+    MOVLW UPPER(TABLA_PULSOS_SERVO)
+    MOVWF TBLPTRU, ACCESS
+    MOVLW HIGH(TABLA_PULSOS_SERVO)
+    MOVWF TBLPTRH, ACCESS
+    MOVLW LOW(TABLA_PULSOS_SERVO)
+    ADDWF TEMP2, W, ACCESS
+    MOVWF TBLPTRL, ACCESS
+    BTFSC STATUS, C
+    INCF TBLPTRH, F
+    
+    RETURN
+; --- Rutina para actualizar el pulso del servo según aciertos ---
+ACTUALIZAR_PULSO_SERVO
+    BTG LATA,4,0
+   
+
+    TBLRD*+              ; Leer el valor de la tabla
+    MOVF TABLAT, W
+    MOVWF SERVO_PULSE
+    RETURN
+
+   
+    
+   
+PULSO_MINIMO
+    MOVLW 6
+    MOVWF SERVO_PULSE
     RETURN
 ; --------------------------------------------
 ; FUNCIONES QUE GESTIONA LA DISTANCIA DE LAS NOTAS
@@ -266,8 +345,8 @@ CONTAR_DURACIO
     SETF TEMPS_CORRECTE
     BSF LATB, 4, 0
     BCF LATA, 2, 0 
-    MOVLW .25           ; 2 ms (180°)
-    MOVWF SERVO_PULSE
+    INCF ACERTADAS, F
+    CALL ACTUALIZAR_PULSO_SERVO
     SALTA1
     RETURN
     
@@ -303,7 +382,7 @@ VALIDATE_TIME_500ms ;validar si han pasado 500 ms
     CALL INCREMENTAR_ESPERA_NOTES
     SETF SEGON3
      
-    BTG LATA,4,0      ; Enciende LED RA4
+    
     RETURN
 
 INCREMENTAR_500ms ;incrementa el contador de 500 ms
@@ -400,8 +479,6 @@ CONFIG_INCORRECTE
     BCF LATB, 4, 0
     BSF LATA, 2, 0 
     SETF TEMPS_CORRECTE
-    MOVLW .10           ; 1 ms (0°)
-    MOVWF SERVO_PULSE
     RETURN
 
 COMPROBAR_NOTA
@@ -514,7 +591,8 @@ STOP_PROGRAM
     BCF LATB, 1, 0
     BCF LATB, 4, 0
     BCF LATA, 2, 0 
-    
+    INCF ACERTADAS, F
+    CALL ACTUALIZAR_PULSO_SERVO
     MOVLW SEVENSEGMENTS_GUION
     MOVWF LATD
     
@@ -607,7 +685,7 @@ START_GAME ; Pre: En FSR0L está cargado PRIMER_DATO
     CALL UPDATE_LENGTH
     
     ;INCF FSR0L,1,0 ;Pasamos a la siguiente nota y duracion
-    
+    CALL INICIALIZAR_SERVO
     ;************************
     ; PROCESAMIENTO DE NOTAS
     ;************************
@@ -736,8 +814,10 @@ INIT_PORTS
     MOVWF FSR0H
     MOVLW PRIMER_DATO
     MOVWF FSR0L
-
     
+    
+    CLRF ACERTADAS
+    CALL PULSO_MINIMO
     
     RETURN
     
